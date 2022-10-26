@@ -48,21 +48,19 @@ impl Display for Node {
         if !self.is_leaf(){
             f.write_str("(")?;
             let mut buffer = Vec::with_capacity(2);
-            for x in &self.children{
-                if let Some(ch) = x{
-                    buffer.push(
+            for ch in self.children.iter().flatten(){
+                buffer.push(
                     if let Some(val) = self.scores.get(&ch.seq){
                         format!("{}:{}", ch, val)
                     } else {
                         format!("{}", ch)
                     }
                     )
-                }
             }
             f.write_str(&buffer.join(","))?;
             f.write_str(")")?;
         }
-        return Ok(())
+    Ok(())
     }
 }
 
@@ -77,7 +75,7 @@ impl Node{
     }
 
     /// constructor for an inner node, allow annotation with optimal seq later
-    pub fn inner<'a>(ch1:Node, ch2:Node) -> Node{
+    pub fn inner(ch1:Node, ch2:Node) -> Node{
         Node{
             seq: '0',
             children: [Some(Box::new(ch1)), Some(Box::new(ch2))],
@@ -102,20 +100,19 @@ impl Node{
             return
         }
 
-        for ch in self.children.iter_mut(){
-            if let Some(child) = ch{
-                child.fitch()
-            }
+        for child in self.children.iter_mut().flatten(){
+            child.fitch()
         }
 
         // calculate new scoring matrix
         let mut scores = HashMap::with_capacity(ALPHABET.len());
         for ch in ALPHABET {
             scores.insert(ch,
-                self.children.iter().map(|x| if let Some(child) = x {
-                    // select the optimal annotation for each child, given the parent annotation ch
-                    ALPHABET.iter().map(|&ch_child| S(ch, ch_child) + child.get_score(ch_child)).min().expect("ALPHABET should not be empty!")
-                } else {0}).sum());
+                          // select the optimal annotation for each child, given the parent annotation ch
+                          self.children.iter().flatten().map(|child| 
+                              ALPHABET.iter().map(|&ch_child| S(ch, ch_child)
+                              + child.get_score(ch_child)).min().expect("ALPHABET should not be empty!")
+                          ).sum());
         }
 
         self.scores = scores;
@@ -141,13 +138,11 @@ impl Node{
         let s = self.seq; // store the current annotation in a variable.
                           // only necessary for the borrow checker not to complain
 
-        for child in self.children.iter_mut() {
-            if let Some(child) = child{
-                if !child.is_leaf(){
-                    //TODO maybe set to prefer existing annotation instead of lexicalic ordering?
-                    child.seq = ALPHABET.iter().map(|&child_ch| (S(s, child_ch) + child.get_score(child_ch), child_ch)).min().expect("ALPHABET should not be empty!").1;
-                    child.label(); // propagate up
-                }
+        for child in self.children.iter_mut().flatten() {
+            if !child.is_leaf(){
+                //TODO maybe set to prefer existing annotation instead of lexicalic ordering?
+                child.seq = ALPHABET.iter().map(|&child_ch| (S(s, child_ch) + child.get_score(child_ch), child_ch)).min().expect("ALPHABET should not be empty!").1;
+                child.label(); // propagate up
             }
         }
 
