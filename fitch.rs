@@ -2,9 +2,18 @@ use std::collections::HashMap; // could use arrays instead, but hashmap is clean
 use std::fmt::Display;
 
 
+// there is an example where the optimal tree uses a suboptimal subtree
+// A -> C: 1 // i think this is only the case for asymmetric distance functions?
+// C -> A: 1.5
+// 
+// A1:(A0:(A, A), C)
+// A2:(A1:(A0(A, A), C), C)
+// C1.5(C1.5(A0(A, A), C), C)
+
+
 const ALPHABET:[char;4] = ['A', 'C', 'G', 'T'];
 
-/// scoring function, takes two bytes from a string slice and outputs the mutation distance
+/// scoring function, takes two chars and outputs the mutation distance
 pub fn S(a:char, b:char) -> usize{
     //if a == b {
     //    0
@@ -15,6 +24,7 @@ pub fn S(a:char, b:char) -> usize{
     if a == b {
         return 0
     }
+
     // lambda to determine whether a base is purine/pyrimidine
     let basetype = |x| if x=='C' || x =='T' {'Y'} else {'R'};
     if basetype(a) == basetype(b){
@@ -27,7 +37,7 @@ pub fn S(a:char, b:char) -> usize{
 
 #[derive(Default, Debug)]
 struct Node{
-    pub seq: char, // u8 would be more appropriate, but this is cleaner
+    pub seq: char, // u8 could be more appropriate, but this is cleaner
         pub children: [Option<Box<Node>>; 2],
         pub scores: HashMap<char, usize>,
 }
@@ -66,8 +76,8 @@ impl Node{
         }
     }
 
-    /// constructor for an internal node, allow annotation with optimal seq later
-    pub fn internal<'a>(ch1:Node, ch2:Node) -> Node{
+    /// constructor for an inner node, allow annotation with optimal seq later
+    pub fn inner<'a>(ch1:Node, ch2:Node) -> Node{
         Node{
             seq: '0',
             children: [Some(Box::new(ch1)), Some(Box::new(ch2))],
@@ -104,32 +114,59 @@ impl Node{
             scores.insert(ch,
                 self.children.iter().map(|x| if let Some(child) = x {
                     // select the optimal annotation for each child, given the parent annotation ch
-                    ALPHABET.iter().map(|&ch_child| S(ch, ch_child) + child.get_score(ch_child)).min().expect("")
+                    ALPHABET.iter().map(|&ch_child| S(ch, ch_child) + child.get_score(ch_child)).min().expect("ALPHABET should not be empty!")
                 } else {0}).sum());
         }
 
         self.scores = scores;
+        // score the index of the optimal annotation for the subtree starting from this node
         // reverse the tuple to properly sort lexicographically
         if let Some((_, ch)) = self.scores.iter().map(|(x, y)| (y, x)).min() {
             self.seq = *ch
         }
+    }
+
+    /// given a tree which has had its scores calculated by a call to fitch(),
+    /// annotate each node with the correct sequence label by backtracking
+    /// Panics if the node does not have a sequence label in ALPHABET
+    pub fn label(&mut self){
+        if self.is_leaf(){
+            return;
+        }
+
+        if !ALPHABET.iter().any(|&x| x == self.seq){
+            panic!("Node.label: Node.seq not in ALPHABET!");
+        }
+
+        let s = self.seq; // store the current annotation in a variable.
+                          // only necessary for the borrow checker not to complain
+
+        for child in self.children.iter_mut() {
+            if let Some(child) = child{
+                if !child.is_leaf(){
+                    //TODO maybe set to prefer existing annotation instead of lexicalic ordering?
+                    child.seq = ALPHABET.iter().map(|&child_ch| (S(s, child_ch) + child.get_score(child_ch), child_ch)).min().expect("ALPHABET should not be empty!").1;
+                    child.label(); // propagate up
+                }
+            }
+        }
+
     }
 }
 
 
 fn main(){
     // some testcases
-    let mut tree = Node::internal(Node::leaf('A'), Node::leaf('G'));
+    let mut tree = Node::inner(Node::leaf('T'), Node::leaf('G'));
+    println!("{}", tree);
+    tree.fitch();
+    tree.label();
+    println!("{}", tree);
+    // tree from https://evol.bio.lmu.de/_statgen/compevol/phylo02.pdf ex. 1
+    let mut tree = Node::inner(Node::inner(Node::inner(Node::inner(Node::leaf('A'), Node::leaf('A')), Node::leaf('G')), Node::inner(Node::leaf('G'), Node::leaf('T'))), Node::inner(Node::leaf('A'), Node::leaf('T')));
     println!("{}", tree);
     tree.fitch();
     println!("{}", tree);
-    let mut tree = Node::internal(Node::internal(Node::leaf('A'), Node::leaf('G')), Node::leaf('G'));
+    tree.label();
     println!("{}", tree);
-    tree.fitch();
-    println!("{}", tree);
-    let mut tree = Node::internal(Node::internal(Node::leaf('A'), Node::internal(Node::leaf('G'), Node::leaf('G'))), Node::leaf('G'));
-    println!("{}", tree);
-    tree.fitch();
-    println!("{}", tree);
-
 }
