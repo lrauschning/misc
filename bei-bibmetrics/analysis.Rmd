@@ -1,0 +1,150 @@
+---
+title: "Bioinformatics in and out of Beijing: a Bibliometrical analysis"
+author: "Leon Rauschning"
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+  html_document:
+    toc: true
+    number_sections: true
+---
+
+At the China College of the German Academic Scholarship Foundation in the working group on the Barefoot Doctor Programme and health collaboration between China and Tanzania, the history of bioinformatics in China came up in a discussion.
+
+As a follow-up, I did a bibliometrics analysis using the Clarivate Web of Science resource, the results of which are compiled in this Rmarkdown document.
+
+If you have ideas for extending this analysis or using a different approach to explore the origins of this young field in China, I'd love to hear them & perhaps collaborate on it! Feel free to reach out!
+
+
+# Obtaining the dataset
+
+## Prepare university list
+
+Download HTML of a search for »China University« in the institution search at Web of Science.
+From the HTML, extract a list of button fields corresponding to the selection
+
+```{sh eval=FALSE}
+grep -oPe '(?<=" lang="en">).*?(?=\</span\>)' universities.html > universities.txt
+
+sed 's/\&amp\;/\&/g' universities.txt | sed ':a; N; $!ba; s/\n/ OR /g'
+# | xclip -selection CLIPBOARD
+
+```
+  
+## Merge downloaded records
+
+Search Web of Science for non-retracted articles in »Mathematical & Computational Biology« with author affiliations at the list of universities.
+Download full records in TSV format in batches of 1k, merge locally:
+
+```{sh eval=FALSE}
+cp recs/savedrecs.txt mergedrecs.tsv # could also do this with head -n 1 >, might be cleaner
+for x in recs/savedrecs\(*.txt; do tail -n 1000 $x >> mergedrecs.tsv; done
+
+# Michigan counts as china, apparently
+# Something about spelling correction?
+# remove it
+grep -v "Michigan" mergedrecs.tsv > processedrecs.tsv
+```
+
+## Read in Data
+
+```{r}
+data <- read.table('./processedrecs.tsv', sep='\t', header=TRUE, quote=NULL, comment.char='')
+
+```
+
+# Plots
+
+```{r}
+library(ggplot2)
+```
+
+There are 3 articles in the data from the 1930s (and one in 1929), all published in Bibliometrika.
+These aren't on what is typically considered bioinformatics, and from the 1940s until 1973 there is no paper in the dataset.
+
+Two papers are annotated as published in January 2025 (Search conducted: 2024-10-02). I think these might be conference publications that have already been accepted, but could not definitely confirm this.
+
+## Basic Stats
+
+```{r}
+
+ggplot(data=data) + geom_bar(aes(as.numeric(PY))) + xlim(1975, 2025)
+```
+
+The number of papers is rising exponentially, though without normalization to the global bioinformatics and Chinese non-bioinformatics paper output, this is somewhat hard to quantify.
+Anecdotally, bioinfo seems to have gotten off the ground a bit later in China than in the US and Europe (Late 90s/Early 2000s).
+
+The spike in papers published in 2022 could correspond to an increased focus on manuscript writing during the lockdowns, or publications of COVID-19-related articles. It could also be explained by articles published in 2023/2024 not yet being indexed in the Web of Science database.
+
+```{r}
+data$oa_clean <- tolower(sub("[ ,].*", "", data$OA))
+ggplot(data=data) + geom_bar(aes(as.numeric(PY), fill=oa_clean)) + xlim(1975, 2025)
+```
+
+As expected, the share of articles published as Open Access seems to have increased in the 2010s.
+Still, many articles are not published as open access, or otherwise are not indexed as Open Access by the Web of Science. Especially green OA may be under-indexed.
+
+## Citations
+
+```{r}
+data$TC <- as.numeric(data$TC)
+
+ggplot(data=data) + geom_bar(aes(TC)) + xlim(1, 100)
+
+mean(data$TC, na.rm=TRUE)
+median(data$TC, na.rm=TRUE)
+```
+
+~~The top cited paper is Uni Michigan – seems the text search for China caught this as well.~~
+Fixed, see above.
+
+A few papers in the dataset are very highly cited (10k-20k citations), including some »canon« bioinformatics software and file format publications. These are excluded in the plots, but drive up the mean citation count (see also below).
+Other than the very long tail, the distribution seems to follow a power law?
+
+```{r}
+citbyyear <- data.frame(1977:2025)
+colnames(citbyyear) <- c('year')
+citbyyear$median <- lapply(citbyyear$year, FUN=function(x) {median(data[data$PY == x, 'TC'], na.rm=TRUE) })
+citbyyear$mean <- lapply(citbyyear$year, FUN=function(x) {mean(data[data$PY == x, 'TC'], na.rm=TRUE) })
+
+citbyyear$year <- as.numeric(citbyyear$year)
+citbyyear$mean <- as.numeric(citbyyear$mean)
+citbyyear$median <- as.numeric(citbyyear$median)
+
+citbyyear
+ggplot(citbyyear) +
+	geom_line(aes(x=year, y=median), colour="green") +
+	geom_line(aes(x=year, y=mean), colour="blue")
+```
+
+*Analysis of the mean/median (blue/green) citations of bioinformatics papers by year.*
+
+In the years until 1990, low numbers of papers overall leads to a very high year-to-year variance.
+Even after that, individual extremely highly cited publications drive up the average of entire years by a factor of 1.5-2x (about what would be expected for a 10-20k citation paper in a year of ~1k publications with typically ~15-20 citations).
+
+Citations per paper seem to have dropped over the years, which likely is a consequence of more recent papers not having the chance to have been cited by other papers yet.
+Unfortunately, Web of Science doesn't seem to provide an age-matched measure of citations out of the box.
+
+```{r}
+
+ggplot(data) +
+	geom_boxplot(aes(PY, TC), outliers=FALSE)
+
+# filter to papers <100 citations
+ggplot(data) +
+	geom_boxplot(aes(PY, TC), outliers=FALSE) +
+	ylim(0, 100)
+
+```
+
+Because of the high within- and between-year-variance in citations and the strong effect of very few extremely highly cited papers, the distribution of citations by year are shown here also as tukey plots.
+This reveals that the decreasing mean citations in the 2010s is driven by fewer very highly cited papers (the median and quartiles change only slightly, with unclear significance), consistent with the hypothesis of high-impact publications not having had the chance to be widely cited at the time of analysis.
+A comparison at a future timepoint would be an interesting avenue to further investigation.
+
+# Conclusions
+
+Due to the fragmented nature of these data, not many conclusions can be drawn from it without further in-depth analysis and comparison to other discipline's output and global trends in bioinformatics publications.
+
+What stands out is the strong exponential increase in bioinformatics publications at Chinese universities, as well as the impact of few very highly cited papers.
+Analysing other measures of research activity, like datasets deposited in repositories or code commits published in zenodo or GitHub may provide a more complete picture of how bioinformatics in China got to where it is now, as well as investigations of the history of bioinformatics departments at individual institutions.
