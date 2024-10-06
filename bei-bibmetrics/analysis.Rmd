@@ -60,7 +60,7 @@ data <- read.table('./processedrecs.tsv', sep='\t', header=TRUE, quote=NULL, com
 library(ggplot2)
 ```
 
-There are 3 articles in the data from the 1930s (and one in 1929), all published in Bibliometrika.
+There are 3 articles in the data from the 1930s (and one in 1929), all published in Biometrika.
 These aren't on what is typically considered bioinformatics, and from the 1940s until 1973 there is no paper in the dataset.
 
 Two papers are annotated as published in January 2025 (Search conducted: 2024-10-02). I think these might be conference publications that have already been accepted, but could not definitely confirm this.
@@ -72,7 +72,7 @@ Two papers are annotated as published in January 2025 (Search conducted: 2024-10
 ggplot(data=data) + geom_bar(aes(as.numeric(PY))) + xlim(1975, 2025)
 ```
 
-The number of papers is rising exponentially, though without normalization to the global bioinformatics and Chinese non-bioinformatics paper output, this is somewhat hard to quantify.
+The number of papers is rising exponentially, though without normalization to the global bioinformatics and Chinese non-bioinformatics paper output, it is hard to interpret that trend.
 Anecdotally, bioinfo seems to have gotten off the ground a bit later in China than in the US and Europe (Late 90s/Early 2000s).
 
 The spike in papers published in 2022 could correspond to an increased focus on manuscript writing during the lockdowns, or publications of COVID-19-related articles. It could also be explained by articles published in 2023/2024 not yet being indexed in the Web of Science database.
